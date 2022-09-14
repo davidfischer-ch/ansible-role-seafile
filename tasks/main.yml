@@ -43,7 +43,7 @@
     name: '{{ item }}'
     owner: '{{ seafile_daemon_user }}'
     group: '{{ seafile_daemon_group }}'
-    mode: 0755
+    mode: '755'
     recurse: no
     state: directory
   become: yes
