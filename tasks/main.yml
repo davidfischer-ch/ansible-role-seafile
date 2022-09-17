@@ -9,6 +9,7 @@
       - seafile_database_password is defined
       - seafile_domains|length > 0
       - seafile_instance_name is defined
+      - seafile_release_checksum is defined
       - seafile_version is defined
   tags: [seafile, always]
 
@@ -28,6 +29,7 @@
       get_url:
         url: '{{ seafile_package_url }}'
         dest: '{{ local_source_directory }}/{{ seafile_package_url|basename }}'
+        checksum: '{{ seafile_release_checksum }}'
         force: no
 
     - name: Extract Seafile distribution package
