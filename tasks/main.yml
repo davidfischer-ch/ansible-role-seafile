@@ -22,8 +22,10 @@
     - name: Install Seafile Python packages
       pip:
         name: '{{ seafile_python_packages }}'
-        executable: pip2
+        executable: '{{ seafile_pip_path }}'
         state: present
+        umask: '{{ seafile_pip_umask }}'
+      environment: '{{ seafile_pip_environment }}'
 
     - name: Download Seafile distribution package
       get_url:
@@ -31,6 +33,7 @@
         dest: '{{ local_source_directory }}/{{ seafile_package_url|basename }}'
         checksum: '{{ seafile_release_checksum }}'
         force: no
+      environment: '{{ seafile_download_environment }}'
 
     - name: Extract Seafile distribution package
       unarchive:

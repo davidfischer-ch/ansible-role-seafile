@@ -1,4 +1,4 @@
-# dependencies
+# Dependencies
 seafile_packages:
   - libmemcached-dev
   - libreoffice
@@ -23,26 +23,39 @@ seafile_python_packages:
   - pylibmc
   - requests
   - urllib3
-# directories
+
+seafile_download_environment: {}
+
+# Python Package Manager
+seafile_pip_path: '{{ python_pip_path }}'
+seafile_pip_umask: '{{ python_pip_umask }}'
+seafile_pip_environment: '{{ python_pip_environment }}'
+
+# Directories
 seafile_app_directory: '/var/app/{{ seafile_instance_name }}'
 seafile_data_directory: '{{ seafile_app_directory }}/seafile-data'
 seafile_log_directory: '/var/log/{{ seafile_instance_name }}'
-# daemon
+
+# Daemon
 seafile_daemon_group: '{{ seafile_daemon_user }}'
 seafile_daemon_user: '{{ seafile_instance_name }}'
-# database
+
+# Database
 seafile_database_name_prefix: '{{ seafile_instance_name }}'
 seafile_database_user: '{{ seafile_instance_name }}'
-# web
+
+# Web
 seafile_domains: []
-# logging
+
+# Logging
 seafile_log_rotations_frequency: daily
 seafile_log_rotations_max_count: 49
 seafile_log_rotations_config_file: logrotate.j2
 seafile_log_rotations:
   - name: seafile
     config_file: '{{ seafile_log_rotations_config_file }}'
-# networking
+
+# Networking
 seafile_interface: lo
 seafile_file_port: 8082
 seafile_hub_port: 8000
