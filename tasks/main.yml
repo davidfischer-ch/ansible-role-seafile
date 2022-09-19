@@ -1,4 +1,5 @@
 # This roles has some steps that should be made more generic to handle multi-tier deployment
+# https://manual.seafile.com/deploy_pro/download_and_setup_seafile_professional_server/
 ---
 
 - assert:
@@ -18,14 +19,6 @@
       package:
         name: '{{ seafile_packages }}'
         state: present
-
-    - name: Install Seafile Python packages
-      pip:
-        name: '{{ seafile_python_packages }}'
-        executable: '{{ seafile_pip_path }}'
-        state: present
-        umask: '{{ seafile_pip_umask }}'
-      environment: '{{ seafile_pip_environment }}'
 
     - name: Download Seafile distribution package
       get_url:
@@ -87,10 +80,45 @@
         regexp: socket.gethostbyname\(socket.gethostname\(\)\)
         replace: args.server_ip
 
+    # TODO Install Python dependencies inside a virtualenv
+    - block:
+        - name: Install Seafile Python packages
+          pip:
+            name: '{{ seafile_python_packages }}'
+            executable: '{{ seafile_pip_path }}'
+            state: present
+            umask: '{{ seafile_pip_umask }}'
+          environment: '{{ seafile_pip_environment }}'
+
+        # See https://forum.seafile.com/t/seafile-community-edition-9-0-5-is-ready/16388
+        - name: Fix CFFI version mismatch
+          lineinfile:
+            path: '{{ seafile_python_requirements_path }}'
+            line: 'cffi=={{ seafile_cffi_version }}'
+            regexp: '^cffi=='
+          when: seafile_cffi_version|length > 0
+
+        - name: Install Seafile Python requirements
+          pip:
+            name: '{{ seafile_python_packages }}'
+            executable: '{{ seafile_pip_path }}'
+            state: present
+            umask: '{{ seafile_pip_umask }}'
+          environment: '{{ seafile_pip_environment }}'
+
+        - name: Install requirements into virtualenv
+          pip:
+            requirements: '{{ seafile_python_requirements_path }}'
+            executable: '{{ seafile_pip_path }}'
+            state: forcereinstall
+            umask: '{{ seafile_pip_umask }}'
+          environment: '{{ seafile_pip_environment }}'
+      tags: virtualenv
+
     # https://manual.seafile.com/deploy/using_mysql.html
     - name: Execute setup script
       command: >
-        python ./setup-seafile-mysql.py auto
+        python3 ./setup-seafile-mysql.py auto
         --server-name {{ seafile_instance_name }}
         --server-ip {{ seafile_domains|first }}
         --fileserver-port {{ seafile_file_port|int }}
@@ -107,10 +135,17 @@
       args:
         chdir: '{{ seafile_app_directory }}/seafile-server'
         creates: '{{ seafile_data_directory }}'
-      become: '{{ seafile_daemon_user }}'
+      become_user: '{{ seafile_daemon_user }}'
       environment:
-        PYTHON: python
+        PYTHON: python3
       register: _seafile_setup
+
+    - name: Connect Seafile events feature
+      template:
+        src: '{{ seafile_events_config_file }}'
+        dest: '{{ seafile_app_directory }}/conf/seafevents.conf'
+        mode: '644'
+      notify: '{{ seafile_daemon_modes[seafile_daemon_mode] }} restart seahub'
 
     - name: Connect Seafile to MemCache
       blockinfile:

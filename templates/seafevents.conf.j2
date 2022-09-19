@@ -1,0 +1,33 @@
+# Configuration from release 9.0.8 and setup script executed
+
+[DATABASE]
+type = mysql
+host = 127.0.0.1
+port = {{ mariadb_port|default(mysql_port)|int }}
+username = {{ seafile_database_user }}
+password = {{ seafile_database_password }}
+name = {{ seafile_database_name_prefix }}-seahub
+
+[AUDIT]
+enabled = true
+
+[INDEX FILES]
+external_es_server = true  # required when ElasticSearch on separate host
+es_host = localhost        # IP address of ElasticSearch host
+es_port = {{ elasticsearch_port|int }}             # port of ElasticSearch host
+interval = 10m             # frequency of index updates in minutes
+highlight = fvh            # parameter for improving the search performance
+
+## If true, indexes the contents of office/pdf files while updating search index
+## Note: If you change this option from "false" to "true", then you need to clear the search index and update the index again. See the FAQ for details.
+index_office_pdf = true
+
+[SEAHUB EMAIL]
+enabled = true
+
+## interval of sending Seahub email. Can be s(seconds), m(minutes), h(hours), d(days)
+interval = 30m
+
+# Enable statistics
+[STATISTICS]
+enabled=true
