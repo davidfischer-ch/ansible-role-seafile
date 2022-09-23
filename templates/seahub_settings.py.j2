@@ -1,0 +1,20 @@
+# -*- coding: utf-8 -*-
+SECRET_KEY = "{{ seafile_hub_secret_key }}"
+
+DATABASES = {
+    'default': {
+        'ENGINE': 'django.db.backends.mysql',
+        'NAME': '{{ seafile_database_name_prefix }}-seahub',
+        'USER': '{{ seafile_database_user }}',
+        'PASSWORD': '{{ seafile_database_password }}',
+        'HOST': '127.0.0.1',
+        'PORT': '{{ mariadb_port|default(mysql_port)|int }}'
+    }
+}
+
+CACHES = {
+    'default': {
+        'BACKEND': 'django_pylibmc.memcached.PyLibMCCache',
+        'LOCATION': '127.0.0.1:{{ memcache_port|int }}'
+    }
+}
