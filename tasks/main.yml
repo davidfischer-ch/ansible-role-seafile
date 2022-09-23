@@ -16,12 +16,12 @@
 
 - block:
     - name: Install Seafile packages
-      package:
+      ansible.builtin.package:
         name: '{{ seafile_packages }}'
         state: present
 
     - name: Download Seafile distribution package
-      get_url:
+      ansible.builtin.get_url:
         url: '{{ seafile_package_url }}'
         dest: '{{ local_source_directory }}/{{ seafile_package_url|basename }}'
         checksum: '{{ seafile_release_checksum }}'
@@ -29,7 +29,7 @@
       environment: '{{ seafile_download_environment }}'
 
     - name: Extract Seafile distribution package
-      unarchive:
+      ansible.builtin.unarchive:
         src: '{{ local_source_directory }}/{{ seafile_package_url|basename }}'
         dest: '{{ local_source_directory }}'
         copy: no
@@ -37,7 +37,7 @@
   tags: [seafile, packages]
 
 - name: Create Application directories
-  file:
+  ansible.builtin.file:
     name: '{{ item }}'
     owner: '{{ seafile_daemon_user }}'
     group: '{{ seafile_daemon_group }}'
@@ -52,7 +52,7 @@
 
 # FIXME multi-tier architecture
 - name: Setup Application database user
-  mysql_user:
+  ansible.builtin.mysql_user:
     name: '{{ seafile_database_user }}'
     append_privs: yes
     host: 127.0.0.1
@@ -68,14 +68,14 @@
 
 - block:
     - name: Update Application
-      command: >
+      ansible.builtin.command: >
         rsync {{ local_source_directory }}/seafile-pro-server-{{ seafile_version }}/
               {{ seafile_app_directory }}/seafile-server/
           --chown {{ seafile_daemon_user }}:{{ seafile_daemon_group }} -og
           --archive --checksum --delete
 
     - name: Prevent useless DNS lookup
-      replace:
+      ansible.builtin.replace:
         name: '{{ seafile_app_directory }}/seafile-server/setup-seafile-mysql.py'
         regexp: socket.gethostbyname\(socket.gethostname\(\)\)
         replace: args.server_ip
@@ -83,7 +83,7 @@
     # TODO Install Python dependencies inside a virtualenv
     - block:
         - name: Install Seafile Python packages
-          pip:
+          ansible.builtin.pip:
             name: '{{ seafile_python_packages }}'
             executable: '{{ seafile_pip_path }}'
             state: present
@@ -92,7 +92,7 @@
 
         # See https://forum.seafile.com/t/seafile-community-edition-9-0-5-is-ready/16388
         - name: Fix CFFI version mismatch
-          lineinfile:
+          ansible.builtin.lineinfile:
             path: '{{ seafile_python_requirements_path }}'
             line: 'cffi=={{ seafile_cffi_version }}'
             regexp: '^cffi=='
@@ -108,7 +108,7 @@
           environment: '{{ seafile_pip_environment }}'
 
         - name: Install Seafile Python requirements
-          pip:
+          ansible.builtin.pip:
             name: '{{ seafile_python_packages }}'
             executable: '{{ seafile_pip_path }}'
             state: present
@@ -116,7 +116,7 @@
           environment: '{{ seafile_pip_environment }}'
 
         - name: Install requirements into virtualenv
-          pip:
+          ansible.builtin.pip:
             requirements: '{{ seafile_python_requirements_path }}'
             executable: '{{ seafile_pip_path }}'
             state: forcereinstall
@@ -126,7 +126,7 @@
 
     # https://manual.seafile.com/deploy/using_mysql.html
     - name: Execute setup script
-      command: >
+      ansible.builtin.command: >
         python3 ./setup-seafile-mysql.py auto
         --server-name {{ seafile_instance_name }}
         --server-ip {{ seafile_domains|first }}
@@ -157,7 +157,7 @@
       notify: '{{ seafile_daemon_modes[seafile_daemon_mode] }} restart seahub'
 
     - name: Connect Seafile to MemCache
-      blockinfile:
+      ansible.builtin.blockinfile:
         path: '{{ seafile_app_directory }}/conf/seahub_settings.py'
         content: "{{ lookup('template', 'seahub_settings.cache.py.j2') }}"
         insertafter: EOF
@@ -165,7 +165,7 @@
       notify: '{{ seafile_daemon_modes[seafile_daemon_mode] }} restart seahub'
 
     - name: Set administrator credentials
-      replace:
+      ansible.builtin.replace:
         name: '{{ seafile_app_directory }}/seafile-server/check_init_admin.py'
         regexp: '= ask_admin_{{ item.key }}\(\)'
         replace: '= "{{ item.value }}"'
@@ -179,7 +179,7 @@
 
     - block:
         - name: Start Seafile services
-          service:
+          ansible.builtin.service:
             name: '{{ item }}'
             enabled: yes
             state: started
@@ -188,11 +188,11 @@
             - seahub
 
         - name: Wait few seconds for the initial auto-configuration
-          pause:
+          ansible.builtin.pause:
             seconds: 10
 
         - name: Trigger Seafile restart
-          command:
+          ansible.builtin.command:
             ls /dev/null
           changed_when: yes
           check_mode: no
@@ -207,7 +207,7 @@
   tags: [seafile, update]
 
 - name: Start Seafile services
-  service:
+  ansible.builtin.service:
     name: '{{ item }}'
     enabled: yes
     state: started
