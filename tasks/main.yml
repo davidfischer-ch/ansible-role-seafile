@@ -98,6 +98,15 @@
             regexp: '^cffi=='
           when: seafile_cffi_version|length > 0
 
+        - name: Set CFFI package version in SeaHub ThirdParty directory
+          ansible.builtin.pip:
+            name: 'cffi=={{ seafile_cffi_version }}'
+            executable: '{{ seafile_pip_path }}'
+            state: forcereinstall
+            umask: '{{ seafile_pip_umask }}'
+            extra_args: --target {{ seafile_app_directory }}/seafile-server/seahub/thirdparty
+          environment: '{{ seafile_pip_environment }}'
+
         - name: Install Seafile Python requirements
           pip:
             name: '{{ seafile_python_packages }}'

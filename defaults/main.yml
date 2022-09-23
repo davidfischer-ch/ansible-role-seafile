@@ -35,7 +35,7 @@ seafile_python_packages:
   - pymysql
   - sqlalchemy
 
-seafile_python_requirements_path: '{{ seafile_app_directory }}/seafile-server-latest/seahub/requirements.txt'
+seafile_python_requirements_path: '{{ seafile_app_directory }}/seafile-server/seahub/requirements.txt'
 
 seafile_download_environment: {}
 
