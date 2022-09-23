@@ -40,18 +40,18 @@
 - block:
     - name: Create Application directories
       ansible.builtin.file:
-        name: '{{ item }}'
+        name: '{{ item.path }}'
         owner: '{{ seafile_daemon_user }}'
         group: '{{ seafile_daemon_group }}'
-        mode: '755'
+        mode: '{{ item.mode }}'
         recurse: no
         state: directory
       loop:
-        - '{{ seafile_app_directory }}'
-        - '{{ seafile_app_directory }}/ccnet'
-        - '{{ seafile_app_directory }}/conf'
-        - '{{ seafile_data_directory }}'
-        - '{{ seafile_log_directory }}'
+        - { path: '{{ seafile_app_directory }}',       mode: '700' }
+        - { path: '{{ seafile_app_directory }}/ccnet', mode: '700' }
+        - { path: '{{ seafile_app_directory }}/conf',  mode: '775' }
+        - { path: '{{ seafile_data_directory }}',      mode: '755' }
+        - { path: '{{ seafile_log_directory }}',       mode: '755' }
 
     - name: Create link to data directory
       ansible.builtin.file:
@@ -122,15 +122,7 @@
           environment: '{{ seafile_pip_environment }}'
           when: seafile_cffi_version|length > 0
 
-        - name: Install Seafile Python requirements
-          ansible.builtin.pip:
-            name: '{{ seafile_python_packages }}'
-            executable: '{{ seafile_pip_path }}'
-            state: present
-            umask: '{{ seafile_pip_umask }}'
-          environment: '{{ seafile_pip_environment }}'
-
-        - name: Install requirements into virtualenv
+        - name: Install requirements
           ansible.builtin.pip:
             requirements: '{{ seafile_python_requirements_path }}'
             executable: '{{ seafile_pip_path }}'
@@ -138,6 +130,31 @@
             umask: '{{ seafile_pip_umask }}'
           environment: '{{ seafile_pip_environment }}'
       tags: virtualenv
+
+    # https://manual.seafile.com/deploy/using_mysql.html
+    - name: Execute setup script
+      ansible.builtin.command: >
+        python3 ./setup-seafile-mysql.py auto
+        --server-name {{ seafile_instance_name }}
+        --server-ip {{ seafile_domains|first }}
+        --fileserver-port {{ seafile_file_port|int }}
+        --seafile-dir {{ seafile_data_directory }}
+        --use-existing-db 0
+        --mysql-host localhost
+        --mysql-port {{ mariadb_port|default(mysql_port)|int }}
+        --mysql-user {{ seafile_database_user }}
+        --mysql-user-passwd {{ seafile_database_password }}
+        --mysql-root-passwd {{ mariadb_root_password|default(mysql_root_password) }}
+        --ccnet-db {{ seafile_database_name_prefix }}-ccnet
+        --seafile-db {{ seafile_database_name_prefix }}-seafile
+        --seahub-db {{ seafile_database_name_prefix }}-seahub
+      args:
+        chdir: '{{ seafile_app_directory }}/seafile-server'
+        creates: '{{ seafile_data_directory }}'
+      become_user: '{{ seafile_daemon_user }}'
+      environment:
+        PYTHON: python3
+      register: _seafile_setup
 
     - name: Configure Seafile
       ansible.builtin.template:
