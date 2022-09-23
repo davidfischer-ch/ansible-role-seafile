@@ -50,6 +50,9 @@ seafile_data_directory: '{{ seafile_app_directory }}/seafile-data'
 seafile_log_directory: '/var/log/{{ seafile_instance_name }}'
 
 # Configuration
+seafile_main_config_file: seafile.conf.j2
+seafile_ccnet_config_file: ccnet.conf.j2
+seafile_dav_config_file: seafdav.conf.j2
 seafile_events_config_file: seafevents.conf.j2
 
 # Daemon

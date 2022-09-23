@@ -1,0 +1,11 @@
+[General]
+
+[Database]
+ENGINE = mysql
+HOST = 127.0.0.1
+PORT = {{ mariadb_port|default(mysql_port)|int }}
+USER = {{ seafile_database_user }}
+PASSWD = {{ seafile_database_password }}
+DB = {{ seafile_database_name_prefix }}-ccnet
+CONNECTION_CHARSET = utf8
+

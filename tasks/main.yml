@@ -149,8 +149,31 @@
         PYTHON: python3
       register: _seafile_setup
 
-    - name: Connect Seafile events feature
-      template:
+    - name: Configure Seafile
+      ansible.builtin.template:
+        src: '{{ seafile_main_config_file }}'
+        dest: '{{ seafile_app_directory }}/conf/seafile.conf'
+        mode: '644'
+      notify: '{{ seafile_daemon_modes[seafile_daemon_mode] }} restart seafile'
+
+    - name: Configure Seafile CCNet
+      ansible.builtin.template:
+        src: '{{ seafile_ccnet_config_file }}'
+        dest: '{{ seafile_app_directory }}/conf/ccnet.conf'
+        mode: '644'
+      notify:
+        - '{{ seafile_daemon_modes[seafile_daemon_mode] }} restart seafile'
+        - '{{ seafile_daemon_modes[seafile_daemon_mode] }} restart seahub'
+
+    - name: Configure Seafile DAV
+      ansible.builtin.template:
+        src: '{{ seafile_dav_config_file }}'
+        dest: '{{ seafile_app_directory }}/conf/seafdav.conf'
+        mode: '644'
+      notify: '{{ seafile_daemon_modes[seafile_daemon_mode] }} restart seahub'
+
+    - name: Configure Seafile Events
+      ansible.builtin.template:
         src: '{{ seafile_events_config_file }}'
         dest: '{{ seafile_app_directory }}/conf/seafevents.conf'
         mode: '644'
