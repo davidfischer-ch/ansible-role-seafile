@@ -107,7 +107,7 @@
       args:
         chdir: '{{ seafile_app_directory }}/seafile-server'
         creates: '{{ seafile_data_directory }}'
-      become: '{{ seafile_daemon_user }}'
+      become_user: '{{ seafile_daemon_user }}'
       environment:
         PYTHON: python
       register: _seafile_setup
