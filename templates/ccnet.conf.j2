@@ -1,0 +1,18 @@
+[General]
+USER_NAME = seafile
+ID = 7b085f5858634084a7e6398ca9bebb789ca19b5b
+NAME = seafile
+SERVICE_URL = http://{{ ansible_default_ipv4.address }}:8000
+
+[Client]
+PORT = 13419
+
+[Database]
+ENGINE = mysql
+HOST = 127.0.0.1
+PORT = {{ mariadb_port|default(mysql_port)|int }}
+USER = {{ seafile_database_user }}
+PASSWD = {{ seafile_database_password }}
+DB = {{ seafile_database_name_prefix }}-ccnet
+CONNECTION_CHARSET = utf8
+

@@ -1,4 +1,5 @@
 # This roles has some steps that should be made more generic to handle multi-tier deployment
+# https://manual.seafile.com/deploy_pro/download_and_setup_seafile_professional_server/
 ---
 
 - assert:
@@ -9,26 +10,19 @@
       - seafile_database_password is defined
       - seafile_domains|length > 0
       - seafile_instance_name is defined
+      - seafile_hub_secret_key|length > 16
       - seafile_release_checksum is defined
       - seafile_version is defined
   tags: [seafile, always]
 
 - block:
     - name: Install Seafile packages
-      package:
+      ansible.builtin.package:
         name: '{{ seafile_packages }}'
         state: present
 
-    - name: Install Seafile Python packages
-      pip:
-        name: '{{ seafile_python_packages }}'
-        executable: '{{ seafile_pip_path }}'
-        state: present
-        umask: '{{ seafile_pip_umask }}'
-      environment: '{{ seafile_pip_environment }}'
-
     - name: Download Seafile distribution package
-      get_url:
+      ansible.builtin.get_url:
         url: '{{ seafile_package_url }}'
         dest: '{{ local_source_directory }}/{{ seafile_package_url|basename }}'
         checksum: '{{ seafile_release_checksum }}'
@@ -36,30 +30,43 @@
       environment: '{{ seafile_download_environment }}'
 
     - name: Extract Seafile distribution package
-      unarchive:
+      ansible.builtin.unarchive:
         src: '{{ local_source_directory }}/{{ seafile_package_url|basename }}'
         dest: '{{ local_source_directory }}'
         copy: no
   become: yes
   tags: [seafile, packages]
 
-- name: Create Application directories
-  file:
-    name: '{{ item }}'
-    owner: '{{ seafile_daemon_user }}'
-    group: '{{ seafile_daemon_group }}'
-    mode: '755'
-    recurse: no
-    state: directory
+- block:
+    - name: Create Application directories
+      ansible.builtin.file:
+        name: '{{ item.path }}'
+        owner: '{{ seafile_daemon_user }}'
+        group: '{{ seafile_daemon_group }}'
+        mode: '{{ item.mode }}'
+        recurse: no
+        state: directory
+      loop:
+        - { path: '{{ seafile_app_directory }}',       mode: '700' }
+        - { path: '{{ seafile_app_directory }}/ccnet', mode: '700' }
+        - { path: '{{ seafile_app_directory }}/conf',  mode: '775' }
+        - { path: '{{ seafile_data_directory }}',      mode: '755' }
+        - { path: '{{ seafile_log_directory }}',       mode: '755' }
+
+    - name: Create link to data directory
+      ansible.builtin.file:
+        src: '{{ seafile_data_directory }}'
+        dest: '{{ seafile_app_directory }}/seafile-data'
+        owner: '{{ seafile_daemon_user }}'
+        group: '{{ seafile_daemon_group }}'
+        state: link
+
   become: yes
-  loop:
-    - '{{ seafile_app_directory }}'
-    - '{{ seafile_log_directory }}'
   tags: [seafile, config]
 
 # FIXME multi-tier architecture
 - name: Setup Application database user
-  mysql_user:
+  ansible.builtin.mysql_user:
     name: '{{ seafile_database_user }}'
     append_privs: yes
     host: 127.0.0.1
@@ -75,22 +82,59 @@
 
 - block:
     - name: Update Application
-      command: >
+      ansible.builtin.command: >
         rsync {{ local_source_directory }}/seafile-pro-server-{{ seafile_version }}/
               {{ seafile_app_directory }}/seafile-server/
           --chown {{ seafile_daemon_user }}:{{ seafile_daemon_group }} -og
           --archive --checksum --delete
 
     - name: Prevent useless DNS lookup
-      replace:
+      ansible.builtin.replace:
         name: '{{ seafile_app_directory }}/seafile-server/setup-seafile-mysql.py'
         regexp: socket.gethostbyname\(socket.gethostname\(\)\)
         replace: args.server_ip
 
+    # TODO Install Python dependencies inside a virtualenv
+    - block:
+        - name: Install Seafile Python packages
+          ansible.builtin.pip:
+            name: '{{ seafile_python_packages }}'
+            executable: '{{ seafile_pip_path }}'
+            state: present
+            umask: '{{ seafile_pip_umask }}'
+          environment: '{{ seafile_pip_environment }}'
+
+        # See https://forum.seafile.com/t/seafile-community-edition-9-0-5-is-ready/16388
+        - name: Fix CFFI version mismatch
+          ansible.builtin.lineinfile:
+            path: '{{ seafile_python_requirements_path }}'
+            line: 'cffi=={{ seafile_cffi_version }}'
+            regexp: '^cffi=='
+          when: seafile_cffi_version|length > 0
+
+        - name: Set CFFI package version in SeaHub ThirdParty directory
+          ansible.builtin.pip:
+            name: 'cffi=={{ seafile_cffi_version }}'
+            executable: '{{ seafile_pip_path }}'
+            state: forcereinstall
+            umask: '{{ seafile_pip_umask }}'
+            extra_args: --target {{ seafile_app_directory }}/seafile-server/seahub/thirdparty
+          environment: '{{ seafile_pip_environment }}'
+          when: seafile_cffi_version|length > 0
+
+        - name: Install requirements
+          ansible.builtin.pip:
+            requirements: '{{ seafile_python_requirements_path }}'
+            executable: '{{ seafile_pip_path }}'
+            state: forcereinstall
+            umask: '{{ seafile_pip_umask }}'
+          environment: '{{ seafile_pip_environment }}'
+      tags: virtualenv
+
     # https://manual.seafile.com/deploy/using_mysql.html
     - name: Execute setup script
-      command: >
-        python ./setup-seafile-mysql.py auto
+      ansible.builtin.command: >
+        python3 ./setup-seafile-mysql.py auto
         --server-name {{ seafile_instance_name }}
         --server-ip {{ seafile_domains|first }}
         --fileserver-port {{ seafile_file_port|int }}
@@ -109,19 +153,48 @@
         creates: '{{ seafile_data_directory }}'
       become_user: '{{ seafile_daemon_user }}'
       environment:
-        PYTHON: python
+        PYTHON: python3
       register: _seafile_setup
 
-    - name: Connect Seafile to MemCache
-      blockinfile:
-        path: '{{ seafile_app_directory }}/conf/seahub_settings.py'
-        content: "{{ lookup('template', 'seahub_settings.cache.py.j2') }}"
-        insertafter: EOF
-        marker: '# {mark} Connect Seafile to MemCache'
+    - name: Configure Seafile
+      ansible.builtin.template:
+        src: '{{ seafile_main_config_file }}'
+        dest: '{{ seafile_app_directory }}/conf/seafile.conf'
+        mode: '644'
+      notify: '{{ seafile_daemon_modes[seafile_daemon_mode] }} restart seafile'
+
+    - name: Configure Seafile CCNet
+      ansible.builtin.template:
+        src: '{{ seafile_ccnet_config_file }}'
+        dest: '{{ seafile_app_directory }}/conf/ccnet.conf'
+        mode: '644'
+      notify:
+        - '{{ seafile_daemon_modes[seafile_daemon_mode] }} restart seafile'
+        - '{{ seafile_daemon_modes[seafile_daemon_mode] }} restart seahub'
+
+    - name: Configure Seafile DAV
+      ansible.builtin.template:
+        src: '{{ seafile_dav_config_file }}'
+        dest: '{{ seafile_app_directory }}/conf/seafdav.conf'
+        mode: '644'
+      notify: '{{ seafile_daemon_modes[seafile_daemon_mode] }} restart seahub'
+
+    - name: Configure Seafile Events
+      ansible.builtin.template:
+        src: '{{ seafile_events_config_file }}'
+        dest: '{{ seafile_app_directory }}/conf/seafevents.conf'
+        mode: '644'
+      notify: '{{ seafile_daemon_modes[seafile_daemon_mode] }} restart seahub'
+
+    - name: Configure SeaHub
+      ansible.builtin.template:
+        src: '{{ seafile_hub_config_file }}'
+        dest: '{{ seafile_app_directory }}/conf/seahub_settings.py'
+        mode: '644'
       notify: '{{ seafile_daemon_modes[seafile_daemon_mode] }} restart seahub'
 
     - name: Set administrator credentials
-      replace:
+      ansible.builtin.replace:
         name: '{{ seafile_app_directory }}/seafile-server/check_init_admin.py'
         regexp: '= ask_admin_{{ item.key }}\(\)'
         replace: '= "{{ item.value }}"'
@@ -132,38 +205,11 @@
         password: '{{ seafile_admin_password }}'
 
     - include_tasks: setup-service-{{ seafile_daemon_mode }}.yml
-
-    - block:
-        - name: Start Seafile services
-          service:
-            name: '{{ item }}'
-            enabled: yes
-            state: started
-          loop:
-            - seafile
-            - seahub
-
-        - name: Wait few seconds for the initial auto-configuration
-          pause:
-            seconds: 10
-
-        - name: Trigger Seafile restart
-          command:
-            ls /dev/null
-          changed_when: yes
-          check_mode: no
-          loop:
-            - seafile
-            - seahub
-          notify: '{{ seafile_daemon_modes[seafile_daemon_mode] }} restart {{ item }}'
-
-        - meta: flush_handlers
-      when: _seafile_setup is change
   become: yes
   tags: [seafile, update]
 
 - name: Start Seafile services
-  service:
+  ansible.builtin.service:
     name: '{{ item }}'
     enabled: yes
     state: started
